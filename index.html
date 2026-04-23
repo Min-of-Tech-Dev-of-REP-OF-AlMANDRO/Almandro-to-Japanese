@@ -33,14 +33,19 @@ function toAlmandro(text) {
 // ===== 翻訳 =====
 async function translate() {
   const input = document.getElementById("input").value;
+  console.log("入力:", input);
 
   const res = await fetch("https://api.mymemory.translated.net/get?q=" 
     + encodeURIComponent(input) + "&langpair=ja|es");
 
   const data = await res.json();
+  console.log("API結果:", data);
+
   let spanish = data.responseData.translatedText;
+  console.log("スペイン語:", spanish);
 
   let al = toAlmandro(spanish);
+  console.log("変換後:", al);
 
   document.getElementById("output").value = al;
 }
