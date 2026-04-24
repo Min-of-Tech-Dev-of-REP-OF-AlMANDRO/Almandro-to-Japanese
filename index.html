@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>日本語 ⇄ アルマンドロ語 翻訳</title>
+  <title>日本語 ⇄ アルマンドロ語 翻訳 v1.1</title>
   <style>
     :root {
       --bg1: #f8f4ea;
@@ -220,7 +220,7 @@
       function reverseLigaturesFromArmandro(text) {
         log("reverseLigaturesFromArmandro called");
         return text
-          .replace(/Œ/g, "de")
+          .replace(/Œ/g, "DE")
           .replace(/Ћ/g, "TH")
           .replace(/ћ/g, "th");
       }
@@ -257,23 +257,102 @@
         return raw;
       }
 
+      function preserveCase(original, replacement) {
+        log("preserveCase called for", { original, replacement });
+        if (!original) return replacement;
+        if (original === original.toUpperCase()) return replacement.toUpperCase();
+        if (original[0] === original[0].toUpperCase() && original.slice(1) === original.slice(1).toLowerCase()) {
+          return replacement.charAt(0).toUpperCase() + replacement.slice(1).toLowerCase();
+        }
+        return replacement.toLowerCase();
+      }
+
+      function convertWordToArmandro(word) {
+        log("convertWordToArmandro called for", word);
+        const lower = word.toLowerCase();
+
+        if (lower === "el") return preserveCase(word, "lu");
+        if (lower === "los") return preserveCase(word, "lus");
+        if (lower === "no") return preserveCase(word, "nu");
+        if (lower === "va") return preserveCase(word, "va");
+        if (lower === "ya") return preserveCase(word, "ya");
+
+        let converted = lower;
+
+        converted = converted.replace(/qu/g, "k");
+        converted = converted.replace(/ll/g, "y");
+        converted = converted.replace(/ñ/g, "ni");
+        converted = converted.replace(/j/g, "h");
+        converted = converted.replace(/g(?=[eiéí])/g, "h");
+        converted = converted.replace(/c(?=[eiéí])/g, "s");
+        converted = converted.replace(/c(?=[aouáóú])/g, "k");
+        converted = converted.replace(/v/g, "b");
+
+        converted = converted.replace(/os\b/g, "us");
+        converted = converted.replace(/o\b/g, "u");
+
+        converted = converted.replace(/o/g, "__TMP_O__");
+        converted = converted.replace(/u/g, "o");
+        converted = converted.replace(/__TMP_O__/g, "u");
+
+        converted = applyLigaturesToArmandro(converted);
+        return preserveCase(word, converted);
+      }
+
+      function convertWordFromArmandro(word) {
+        log("convertWordFromArmandro called for", word);
+        const reversedLigatures = reverseLigaturesFromArmandro(word);
+        const lower = reversedLigatures.toLowerCase();
+
+        if (lower === "lu") return preserveCase(word, "el");
+        if (lower === "lus") return preserveCase(word, "los");
+        if (lower === "nu") return preserveCase(word, "no");
+        if (lower === "va") return preserveCase(word, "va");
+        if (lower === "ya") return preserveCase(word, "ya");
+        if (lower === "no") return preserveCase(word, "no");
+        if (lower === "el") return preserveCase(word, "el");
+        if (lower === "los") return preserveCase(word, "los");
+
+        let converted = lower;
+
+        converted = converted.replace(/u/g, "__TMP_U__");
+        converted = converted.replace(/o/g, "u");
+        converted = converted.replace(/__TMP_U__/g, "o");
+
+        converted = converted.replace(/ni/g, "ñ");
+        converted = converted.replace(/y/g, "ll");
+        converted = converted.replace(/h/g, "j");
+        converted = converted.replace(/b/g, "v");
+        converted = converted.replace(/k/g, "c");
+
+        return preserveCase(word, converted);
+      }
+
+      function convertSentenceWords(text, wordConverter) {
+        log("convertSentenceWords called");
+        return text.replace(/[A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+/g, (word) => wordConverter(word));
+      }
+
       function transformSpanishToArmandro(spanishText) {
         log("transformSpanishToArmandro called");
         let text = normalizeWhitespace(spanishText);
         text = text.replace(/\b(no)\s+(voy|vas|va|vamos|van)\s+a\s+([a-záéíóúñü]+)/gi, (match, noWord, aux, verb) => {
-          return "no va " + spanishInfinitiveGuess(verb);
+          return "nu va " + convertWordToArmandro(spanishInfinitiveGuess(verb));
         });
         text = text.replace(/\b(voy|vas|va|vamos|van)\s+a\s+([a-záéíóúñü]+)/gi, (match, aux, verb) => {
-          return "va " + spanishInfinitiveGuess(verb);
+          return "va " + convertWordToArmandro(spanishInfinitiveGuess(verb));
         });
         text = text.replace(/\b(he|has|ha|hemos|han)\s+([a-záéíóúñü]+)/gi, (match, aux, verb) => {
-          return "ya " + spanishInfinitiveGuess(verb);
+          return "ya " + convertWordToArmandro(spanishInfinitiveGuess(verb));
         });
         text = text.replace(/\b(no)\s+([a-záéíóúñü]+(?:o|as|a|amos|an|es|e|í|ió|ieron|aste|ó|aba|aban|ía|ían))\b/gi, (match, noWord, verb) => {
-          return "no " + spanishInfinitiveGuess(verb);
+          return "nu " + convertWordToArmandro(spanishInfinitiveGuess(verb));
         });
+        text = text.replace(/\bno\b/gi, (word) => convertWordToArmandro(word));
+        text = text.replace(/\bel\b/gi, (word) => convertWordToArmandro(word));
+        text = text.replace(/\blos\b/gi, (word) => convertWordToArmandro(word));
+        text = convertSentenceWords(text, convertWordToArmandro);
         text = text.replace(/\s+/g, " ").trim();
-        text = applyLigaturesToArmandro(text);
         log("transformSpanishToArmandro result:", text);
         return text;
       }
@@ -281,10 +360,21 @@
       function transformArmandroToSpanish(armandroText) {
         log("transformArmandroToSpanish called");
         let text = normalizeWhitespace(armandroText);
-        text = reverseLigaturesFromArmandro(text);
-        text = text.replace(/\bno\s+va\s+([a-záéíóúñü]+)/gi, "no va a $1");
-        text = text.replace(/\bya\s+([a-záéíóúñü]+)/gi, "ya $1");
-        text = text.replace(/\bva\s+([a-záéíóúñü]+)/gi, "va a $1");
+        text = text.replace(/\bnu\s+va\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
+          return "no va a " + convertWordFromArmandro(verb);
+        });
+        text = text.replace(/\bva\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
+          return "va a " + convertWordFromArmandro(verb);
+        });
+        text = text.replace(/\bya\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
+          return "ya " + convertWordFromArmandro(verb);
+        });
+        text = text.replace(/\bnu\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
+          return "no " + convertWordFromArmandro(verb);
+        });
+        text = text.replace(/\blu\b/gi, (word) => convertWordFromArmandro(word));
+        text = text.replace(/\blus\b/gi, (word) => convertWordFromArmandro(word));
+        text = convertSentenceWords(text, convertWordFromArmandro);
         log("transformArmandroToSpanish result:", text);
         return text;
       }
