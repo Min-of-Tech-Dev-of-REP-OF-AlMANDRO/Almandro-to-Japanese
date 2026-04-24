@@ -1,113 +1,432 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>アルマンドロ語翻訳（デバッグ版）</title>
-<style>
-body { font-family: sans-serif; padding: 20px; }
-textarea { width: 100%; height: 100px; margin: 10px 0; }
-button { padding: 10px; margin: 5px; }
-#log {
-  background: #111;
-  color: #0f0;
-  padding: 10px;
-  height: 200px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  font-size: 12px;
-}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日本語 ⇄ アルマンドロ語 翻訳</title>
+  <style>
+    :root {
+      --bg1: #f8f4ea;
+      --bg2: #d9efe8;
+      --panel: rgba(255, 251, 244, 0.94);
+      --ink: #17333a;
+      --accent: #b24a2f;
+      --accent-2: #246b63;
+      --line: rgba(23, 51, 58, 0.14);
+      --shadow: 0 16px 45px rgba(23, 51, 58, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Yu Gothic UI", "Hiragino Sans", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(178, 74, 47, 0.18), transparent 34%),
+        radial-gradient(circle at bottom right, rgba(36, 107, 99, 0.18), transparent 30%),
+        linear-gradient(135deg, var(--bg1), var(--bg2));
+    }
+
+    .wrap {
+      width: min(1100px, calc(100% - 32px));
+      margin: 32px auto;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.8rem, 3vw, 2.8rem);
+      line-height: 1.1;
+    }
+
+    p.note {
+      margin: 0 0 20px;
+      color: rgba(23, 51, 58, 0.78);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      font-weight: 700;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      resize: vertical;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.92);
+      color: var(--ink);
+      font: inherit;
+      line-height: 1.7;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 18px 0;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), #d97c39);
+      box-shadow: 0 10px 24px rgba(178, 74, 47, 0.22);
+    }
+
+    button.secondary {
+      background: linear-gradient(135deg, var(--accent-2), #2d8d7b);
+      box-shadow: 0 10px 24px rgba(36, 107, 99, 0.22);
+    }
+
+    .status, .debug {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 14px;
+    }
+
+    .status {
+      min-height: 56px;
+      margin-bottom: 16px;
+      white-space: pre-wrap;
+    }
+
+    .debug {
+      min-height: 180px;
+      max-height: 260px;
+      overflow: auto;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 820px) {
+      .grid { grid-template-columns: 1fr; }
+      .wrap { margin: 16px auto; padding: 18px; }
+    }
+  </style>
 </head>
 <body>
+  <main class="wrap">
+    <h1>日本語 ⇄ アルマンドロ語 翻訳</h1>
+    <p class="note">GitHub Pages向けのフロントエンド完結版です。翻訳は外部API経由で日本語 ⇄ スペイン語を行い、その後アルマンドロ語へ相互変換します。</p>
 
-<h2>日本語 → アルマンドロ語（デバッグ版）</h2>
+    <div id="status" class="status">準備中...</div>
 
-<textarea id="input" placeholder="日本語入力"></textarea>
+    <div class="grid">
+      <section class="panel">
+        <label for="inputText">入力</label>
+        <textarea id="inputText" placeholder="ここに文章を入力してください"></textarea>
+      </section>
+      <section class="panel">
+        <label for="outputText">出力</label>
+        <textarea id="outputText" placeholder="翻訳結果がここに表示されます"></textarea>
+      </section>
+    </div>
 
-<br>
+    <div class="actions">
+      <button id="btnJaToAr">日→アルマンドロ</button>
+      <button id="btnArToJa" class="secondary">アルマンドロ→日</button>
+      <button id="btnSwap" type="button">入力と出力を入れ替え</button>
+      <button id="btnClear" type="button" class="secondary">クリア</button>
+    </div>
 
-<button onclick="translate()">翻訳</button>
+    <section class="panel">
+      <label for="debugLog">デバッグログ</label>
+      <div id="debugLog" class="debug"></div>
+    </section>
+  </main>
 
-<textarea id="output" placeholder="結果"></textarea>
+  <script>
+    (() => {
+      "use strict";
 
-<h3>デバッグログ</h3>
-<div id="log"></div>
+      const API_BASE = "https://api.mymemory.translated.net/get";
+      const state = {
+        input: null,
+        output: null,
+        status: null,
+        debug: null,
+        btnJaToAr: null,
+        btnArToJa: null,
+        btnSwap: null,
+        btnClear: null
+      };
 
-<script>
-// ===== ログ出力 =====
-function log(msg) {
-  const logDiv = document.getElementById("log");
-  logDiv.textContent += msg + "\n";
-  logDiv.scrollTop = logDiv.scrollHeight;
-}
+      function log(...args) {
+        const message = args.map((value) => {
+          if (typeof value === "string") return value;
+          try { return JSON.stringify(value, null, 2); } catch (error) { return String(value); }
+        }).join(" ");
+        console.log("[GITHUB_TR]", message);
+        if (state.debug) {
+          const time = new Date().toLocaleTimeString("ja-JP", { hour12: false });
+          state.debug.textContent += "[" + time + "] " + message + "\n";
+          state.debug.scrollTop = state.debug.scrollHeight;
+        }
+      }
 
-// ===== アルマンドロ変換 =====
-function toAlmandro(text) {
-  log("変換前: " + text);
+      function setStatus(message, isError = false) {
+        log("setStatus called:", { message, isError });
+        if (!state.status) return;
+        state.status.textContent = message;
+        state.status.style.color = isError ? "#9f1f1f" : "var(--ink)";
+      }
 
-  let result = text
-    .replace(/THE/g, "ЋE")
-    .replace(/TH/g, "Ћ")
-    .replace(/th/g, "ћ")
-    .replace(/de/g, "de")
-    .replace(/DE/g, "Œ")
-    .replace(/ar/g, "ar")
-    .replace(/AR/g, "AR");
+      function escapeHtml(value) {
+        return value.replace(/[&<>"']/g, (char) => (
+          { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]
+        ));
+      }
 
-  log("変換後: " + result);
-  return result;
-}
+      function normalizeWhitespace(text) {
+        log("normalizeWhitespace called");
+        return text.replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").trim();
+      }
 
-// ===== 翻訳 =====
-async function translate() {
-  document.getElementById("log").textContent = ""; // ログクリア
+      function applyLigaturesToArmandro(text) {
+        log("applyLigaturesToArmandro called");
+        return text
+          .replace(/DE/g, "Œ")
+          .replace(/de/g, "Œ")
+          .replace(/TH/g, "Ћ")
+          .replace(/th/g, "ћ")
+          .replace(/Th/g, "ћ");
+      }
 
-  const input = document.getElementById("input").value;
-  log("入力: " + input);
+      function reverseLigaturesFromArmandro(text) {
+        log("reverseLigaturesFromArmandro called");
+        return text
+          .replace(/Œ/g, "de")
+          .replace(/Ћ/g, "TH")
+          .replace(/ћ/g, "th");
+      }
 
-  if (!input) {
-    log("⚠ 入力が空です");
-    return;
-  }
+      function spanishInfinitiveGuess(word) {
+        log("spanishInfinitiveGuess called for", word);
+        const raw = word.toLowerCase();
+        const irregular = {
+          fui: "ir", fue: "ir", fueron: "ir", iba: "ir", voy: "ir", va: "ir", vamos: "ir",
+          soy: "ser", es: "ser", era: "ser",
+          tengo: "tener", tiene: "tener", tienen: "tener",
+          hago: "hacer", hace: "hacer", hacen: "hacer",
+          digo: "decir", dice: "decir", dicen: "decir",
+          veo: "ver", ve: "ver", ven: "ver"
+        };
+        if (irregular[raw]) return irregular[raw];
+        const suffixMap = [
+          [/ando$/, "ar"], [/iendo$/, "er"], [/yendo$/, "er"],
+          [/aré$|arás$|ará$|aremos$|arán$/, "ar"],
+          [/eré$|erás$|erá$|eremos$|erán$/, "er"],
+          [/iré$|irás$|irá$|iremos$|irán$/, "ir"],
+          [/aba$|abas$|ábamos$|aban$/, "ar"],
+          [/ía$|ías$|íamos$|ían$/, "er"],
+          [/é$|aste$|ó$|amos$|aron$/, "ar"],
+          [/í$|iste$|ió$|imos$|ieron$/, "ir"],
+          [/o$|as$|a$|amos$|an$/, "ar"],
+          [/es$|e$/, "er"]
+        ];
+        for (const [pattern, replacement] of suffixMap) {
+          if (pattern.test(raw) && raw.length > 2) {
+            return raw.replace(pattern, replacement);
+          }
+        }
+        return raw;
+      }
 
-  try {
-    log("APIリクエスト開始...");
+      function transformSpanishToArmandro(spanishText) {
+        log("transformSpanishToArmandro called");
+        let text = normalizeWhitespace(spanishText);
+        text = text.replace(/\b(no)\s+(voy|vas|va|vamos|van)\s+a\s+([a-záéíóúñü]+)/gi, (match, noWord, aux, verb) => {
+          return "no va " + spanishInfinitiveGuess(verb);
+        });
+        text = text.replace(/\b(voy|vas|va|vamos|van)\s+a\s+([a-záéíóúñü]+)/gi, (match, aux, verb) => {
+          return "va " + spanishInfinitiveGuess(verb);
+        });
+        text = text.replace(/\b(he|has|ha|hemos|han)\s+([a-záéíóúñü]+)/gi, (match, aux, verb) => {
+          return "ya " + spanishInfinitiveGuess(verb);
+        });
+        text = text.replace(/\b(no)\s+([a-záéíóúñü]+(?:o|as|a|amos|an|es|e|í|ió|ieron|aste|ó|aba|aban|ía|ían))\b/gi, (match, noWord, verb) => {
+          return "no " + spanishInfinitiveGuess(verb);
+        });
+        text = text.replace(/\s+/g, " ").trim();
+        text = applyLigaturesToArmandro(text);
+        log("transformSpanishToArmandro result:", text);
+        return text;
+      }
 
-    const url = "https://api.mymemory.translated.net/get?q="
-      + encodeURIComponent(input)
-      + "&langpair=ja|es";
+      function transformArmandroToSpanish(armandroText) {
+        log("transformArmandroToSpanish called");
+        let text = normalizeWhitespace(armandroText);
+        text = reverseLigaturesFromArmandro(text);
+        text = text.replace(/\bno\s+va\s+([a-záéíóúñü]+)/gi, "no va a $1");
+        text = text.replace(/\bya\s+([a-záéíóúñü]+)/gi, "ya $1");
+        text = text.replace(/\bva\s+([a-záéíóúñü]+)/gi, "va a $1");
+        log("transformArmandroToSpanish result:", text);
+        return text;
+      }
 
-    log("URL: " + url);
+      async function translateViaMyMemory(text, source, target) {
+        log("translateViaMyMemory called:", { text, source, target });
+        const url = API_BASE + "?q=" + encodeURIComponent(text) + "&langpair=" + encodeURIComponent(source + "|" + target) + "&mt=1";
+        log("API URL:", url);
+        const response = await fetch(url, { method: "GET" });
+        log("API response status:", response.status);
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error("翻訳APIエラー: HTTP " + response.status + " " + body.slice(0, 200));
+        }
+        const data = await response.json();
+        log("API JSON:", data);
+        const translatedText =
+          data && data.responseData && typeof data.responseData.translatedText === "string"
+            ? data.responseData.translatedText
+            : data && typeof data.translatedText === "string"
+              ? data.translatedText
+              : "";
+        if (!translatedText) {
+          throw new Error("APIレスポンスに translatedText が見つかりませんでした");
+        }
+        return translatedText;
+      }
 
-    const res = await fetch(url);
-    log("HTTPステータス: " + res.status);
+      async function translateJapaneseToArmandro() {
+        log("translateJapaneseToArmandro called");
+        const text = normalizeWhitespace(state.input.value || "");
+        if (!text) {
+          setStatus("入力欄が空です。日本語を入力してください。", true);
+          return;
+        }
+        setStatus("日本語 → スペイン語 → アルマンドロ語 で翻訳中...");
+        try {
+          const spanish = await window.translate(text, "ja", "es");
+          log("Japanese -> Spanish result:", spanish);
+          const armandro = transformSpanishToArmandro(spanish);
+          state.output.value = armandro;
+          setStatus("翻訳が完了しました。");
+        } catch (error) {
+          log("translateJapaneseToArmandro error:", error.message);
+          state.output.value = "";
+          setStatus("翻訳に失敗しました。APIの一時停止、CORS、通信エラーの可能性があります。\n" + error.message, true);
+        }
+      }
 
-    const data = await res.json();
-    log("APIレスポンス: " + JSON.stringify(data));
+      async function translateArmandroToJapanese() {
+        log("translateArmandroToJapanese called");
+        const text = normalizeWhitespace(state.input.value || "");
+        if (!text) {
+          setStatus("入力欄が空です。アルマンドロ語を入力してください。", true);
+          return;
+        }
+        setStatus("アルマンドロ語 → スペイン語 → 日本語 で翻訳中...");
+        try {
+          const spanish = transformArmandroToSpanish(text);
+          const japanese = await window.translate(spanish, "es", "ja");
+          log("Spanish -> Japanese result:", japanese);
+          state.output.value = japanese;
+          setStatus("逆翻訳が完了しました。");
+        } catch (error) {
+          log("translateArmandroToJapanese error:", error.message);
+          state.output.value = "";
+          setStatus("逆翻訳に失敗しました。APIの一時停止、CORS、通信エラーの可能性があります。\n" + error.message, true);
+        }
+      }
 
-    if (!data.responseData) {
-      log("❌ responseDataが存在しません");
-      return;
-    }
+      function bindEvents() {
+        log("bindEvents called");
+        state.btnJaToAr.addEventListener("click", async () => {
+          log("button click: 日→アルマンドロ");
+          await translateJapaneseToArmandro();
+        });
+        state.btnArToJa.addEventListener("click", async () => {
+          log("button click: アルマンドロ→日");
+          await translateArmandroToJapanese();
+        });
+        state.btnSwap.addEventListener("click", () => {
+          log("button click: 入力と出力を入れ替え");
+          const temp = state.input.value;
+          state.input.value = state.output.value;
+          state.output.value = temp;
+          setStatus("入力欄と出力欄を入れ替えました。");
+        });
+        state.btnClear.addEventListener("click", () => {
+          log("button click: クリア");
+          state.input.value = "";
+          state.output.value = "";
+          setStatus("入力欄と出力欄をクリアしました。");
+        });
+      }
 
-    let spanish = data.responseData.translatedText;
-    log("スペイン語: " + spanish);
+      function initDom() {
+        log("initDom called");
+        state.input = document.getElementById("inputText");
+        state.output = document.getElementById("outputText");
+        state.status = document.getElementById("status");
+        state.debug = document.getElementById("debugLog");
+        state.btnJaToAr = document.getElementById("btnJaToAr");
+        state.btnArToJa = document.getElementById("btnArToJa");
+        state.btnSwap = document.getElementById("btnSwap");
+        state.btnClear = document.getElementById("btnClear");
+      }
 
-    if (!spanish) {
-      log("❌ 翻訳結果が空です");
-      return;
-    }
+      window.onerror = function(message, source, lineno, colno, error) {
+        const detail = [
+          "window.onerror captured",
+          "message: " + message,
+          "source: " + source,
+          "line: " + lineno,
+          "column: " + colno,
+          "error: " + (error && error.stack ? error.stack : String(error))
+        ].join("\n");
+        log(detail);
+        setStatus("JavaScriptエラーが発生しました。\n" + detail, true);
+        return false;
+      };
 
-    let al = toAlmandro(spanish);
+      window.addEventListener("unhandledrejection", (event) => {
+        log("unhandledrejection captured:", event.reason);
+        setStatus("非同期エラーが発生しました。\n" + (event.reason && event.reason.message ? event.reason.message : String(event.reason)), true);
+      });
 
-    document.getElementById("output").value = al;
-    log("✅ 出力完了");
+      window.translate = async function(text, source, target) {
+        log("window.translate exists and was called:", { source, target });
+        return translateViaMyMemory(text, source, target);
+      };
 
-  } catch (e) {
-    log("💥 エラー発生: " + e);
-  }
-}
-</script>
-
+      document.addEventListener("DOMContentLoaded", () => {
+        console.log("[GITHUB_TR] DOMContentLoaded fired");
+        initDom();
+        log("DOMContentLoaded initialization started");
+        log("translate function type:", typeof window.translate);
+        bindEvents();
+        setStatus("初期化完了。GitHub Pages上でそのまま実行できます。");
+      });
+    })();
+  </script>
 </body>
 </html>
