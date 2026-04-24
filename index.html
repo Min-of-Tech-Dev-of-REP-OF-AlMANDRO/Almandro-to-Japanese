@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>日本語 ⇄ アルマンドロ語 翻訳 v1.1</title>
+  <title>日本語 ⇄ アルマンドロ語 翻訳</title>
   <style>
     :root {
       --bg1: #f8f4ea;
@@ -167,6 +167,24 @@
       "use strict";
 
       const API_BASE = "https://api.mymemory.translated.net/get";
+      const SPANISH_TO_ARMANDRO_DICTIONARY = {
+        que: "ke",
+        quien: "kien",
+        quienes: "kienes",
+        guitarra: "gitarra",
+        guerra: "gerra",
+        llamar: "yamar",
+        lluvia: "yubia"
+      };
+      const ARMANDRO_TO_SPANISH_DICTIONARY = {
+        ke: "que",
+        kien: "quien",
+        kienes: "quienes",
+        gitarra: "guitarra",
+        gerra: "guerra",
+        yamar: "llamar",
+        yubia: "lluvia"
+      };
       const state = {
         input: null,
         output: null,
@@ -206,7 +224,27 @@
 
       function normalizeWhitespace(text) {
         log("normalizeWhitespace called");
-        return text.replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").trim();
+        return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      }
+
+      function mapLines(text, mapper) {
+        log("mapLines called");
+        return text.split("\n").map((line, index) => {
+          log("mapLines processing line:", { index, line });
+          return mapper(line, index);
+        }).join("\n");
+      }
+
+      async function mapLinesAsync(text, mapper) {
+        log("mapLinesAsync called");
+        const lines = text.split("\n");
+        const results = [];
+        for (let index = 0; index < lines.length; index += 1) {
+          const line = lines[index];
+          log("mapLinesAsync processing line:", { index, line });
+          results.push(await mapper(line, index));
+        }
+        return results.join("\n");
       }
 
       function applyLigaturesToArmandro(text) {
@@ -271,6 +309,11 @@
         log("convertWordToArmandro called for", word);
         const lower = word.toLowerCase();
 
+        if (SPANISH_TO_ARMANDRO_DICTIONARY[lower]) {
+          log("convertWordToArmandro dictionary hit:", lower);
+          return preserveCase(word, SPANISH_TO_ARMANDRO_DICTIONARY[lower]);
+        }
+
         if (lower === "el") return preserveCase(word, "lu");
         if (lower === "los") return preserveCase(word, "lus");
         if (lower === "no") return preserveCase(word, "nu");
@@ -304,6 +347,11 @@
         const reversedLigatures = reverseLigaturesFromArmandro(word);
         const lower = reversedLigatures.toLowerCase();
 
+        if (ARMANDRO_TO_SPANISH_DICTIONARY[lower]) {
+          log("convertWordFromArmandro dictionary hit:", lower);
+          return preserveCase(word, ARMANDRO_TO_SPANISH_DICTIONARY[lower]);
+        }
+
         if (lower === "lu") return preserveCase(word, "el");
         if (lower === "lus") return preserveCase(word, "los");
         if (lower === "nu") return preserveCase(word, "no");
@@ -335,48 +383,57 @@
 
       function transformSpanishToArmandro(spanishText) {
         log("transformSpanishToArmandro called");
-        let text = normalizeWhitespace(spanishText);
-        text = text.replace(/\b(no)\s+(voy|vas|va|vamos|van)\s+a\s+([a-záéíóúñü]+)/gi, (match, noWord, aux, verb) => {
-          return "nu va " + convertWordToArmandro(spanishInfinitiveGuess(verb));
+        const text = normalizeWhitespace(spanishText);
+        const converted = mapLines(text, (line) => {
+          if (!line.trim()) return "";
+          let nextLine = line;
+          nextLine = nextLine.replace(/\b(no)\s+(voy|vas|va|vamos|van)\s+a\s+([a-záéíóúñü]+)/gi, (match, noWord, aux, verb) => {
+            return "nu va " + convertWordToArmandro(spanishInfinitiveGuess(verb));
+          });
+          nextLine = nextLine.replace(/\b(voy|vas|va|vamos|van)\s+a\s+([a-záéíóúñü]+)/gi, (match, aux, verb) => {
+            return "va " + convertWordToArmandro(spanishInfinitiveGuess(verb));
+          });
+          nextLine = nextLine.replace(/\b(he|has|ha|hemos|han)\s+([a-záéíóúñü]+)/gi, (match, aux, verb) => {
+            return "ya " + convertWordToArmandro(spanishInfinitiveGuess(verb));
+          });
+          nextLine = nextLine.replace(/\b(no)\s+([a-záéíóúñü]+(?:o|as|a|amos|an|es|e|í|ió|ieron|aste|ó|aba|aban|ía|ían))\b/gi, (match, noWord, verb) => {
+            return "nu " + convertWordToArmandro(spanishInfinitiveGuess(verb));
+          });
+          nextLine = nextLine.replace(/\bno\b/gi, (word) => convertWordToArmandro(word));
+          nextLine = nextLine.replace(/\bel\b/gi, (word) => convertWordToArmandro(word));
+          nextLine = nextLine.replace(/\blos\b/gi, (word) => convertWordToArmandro(word));
+          nextLine = convertSentenceWords(nextLine, convertWordToArmandro);
+          return nextLine;
         });
-        text = text.replace(/\b(voy|vas|va|vamos|van)\s+a\s+([a-záéíóúñü]+)/gi, (match, aux, verb) => {
-          return "va " + convertWordToArmandro(spanishInfinitiveGuess(verb));
-        });
-        text = text.replace(/\b(he|has|ha|hemos|han)\s+([a-záéíóúñü]+)/gi, (match, aux, verb) => {
-          return "ya " + convertWordToArmandro(spanishInfinitiveGuess(verb));
-        });
-        text = text.replace(/\b(no)\s+([a-záéíóúñü]+(?:o|as|a|amos|an|es|e|í|ió|ieron|aste|ó|aba|aban|ía|ían))\b/gi, (match, noWord, verb) => {
-          return "nu " + convertWordToArmandro(spanishInfinitiveGuess(verb));
-        });
-        text = text.replace(/\bno\b/gi, (word) => convertWordToArmandro(word));
-        text = text.replace(/\bel\b/gi, (word) => convertWordToArmandro(word));
-        text = text.replace(/\blos\b/gi, (word) => convertWordToArmandro(word));
-        text = convertSentenceWords(text, convertWordToArmandro);
-        text = text.replace(/\s+/g, " ").trim();
-        log("transformSpanishToArmandro result:", text);
-        return text;
+        log("transformSpanishToArmandro result:", converted);
+        return converted;
       }
 
       function transformArmandroToSpanish(armandroText) {
         log("transformArmandroToSpanish called");
-        let text = normalizeWhitespace(armandroText);
-        text = text.replace(/\bnu\s+va\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
-          return "no va a " + convertWordFromArmandro(verb);
+        const text = normalizeWhitespace(armandroText);
+        const converted = mapLines(text, (line) => {
+          if (!line.trim()) return "";
+          let nextLine = line;
+          nextLine = nextLine.replace(/\bnu\s+va\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
+            return "no va a " + convertWordFromArmandro(verb);
+          });
+          nextLine = nextLine.replace(/\bva\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
+            return "va a " + convertWordFromArmandro(verb);
+          });
+          nextLine = nextLine.replace(/\bya\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
+            return "ya " + convertWordFromArmandro(verb);
+          });
+          nextLine = nextLine.replace(/\bnu\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
+            return "no " + convertWordFromArmandro(verb);
+          });
+          nextLine = nextLine.replace(/\blu\b/gi, (word) => convertWordFromArmandro(word));
+          nextLine = nextLine.replace(/\blus\b/gi, (word) => convertWordFromArmandro(word));
+          nextLine = convertSentenceWords(nextLine, convertWordFromArmandro);
+          return nextLine;
         });
-        text = text.replace(/\bva\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
-          return "va a " + convertWordFromArmandro(verb);
-        });
-        text = text.replace(/\bya\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
-          return "ya " + convertWordFromArmandro(verb);
-        });
-        text = text.replace(/\bnu\s+([A-Za-zÁÉÍÓÚÜÑáéíóúüñŒЋћ]+)/gi, (match, verb) => {
-          return "no " + convertWordFromArmandro(verb);
-        });
-        text = text.replace(/\blu\b/gi, (word) => convertWordFromArmandro(word));
-        text = text.replace(/\blus\b/gi, (word) => convertWordFromArmandro(word));
-        text = convertSentenceWords(text, convertWordFromArmandro);
-        log("transformArmandroToSpanish result:", text);
-        return text;
+        log("transformArmandroToSpanish result:", converted);
+        return converted;
       }
 
       async function translateViaMyMemory(text, source, target) {
@@ -406,13 +463,16 @@
       async function translateJapaneseToArmandro() {
         log("translateJapaneseToArmandro called");
         const text = normalizeWhitespace(state.input.value || "");
-        if (!text) {
+        if (!text.trim()) {
           setStatus("入力欄が空です。日本語を入力してください。", true);
           return;
         }
         setStatus("日本語 → スペイン語 → アルマンドロ語 で翻訳中...");
         try {
-          const spanish = await window.translate(text, "ja", "es");
+          const spanish = await mapLinesAsync(text, async (line) => {
+            if (!line.trim()) return "";
+            return window.translate(line, "ja", "es");
+          });
           log("Japanese -> Spanish result:", spanish);
           const armandro = transformSpanishToArmandro(spanish);
           state.output.value = armandro;
@@ -427,14 +487,17 @@
       async function translateArmandroToJapanese() {
         log("translateArmandroToJapanese called");
         const text = normalizeWhitespace(state.input.value || "");
-        if (!text) {
+        if (!text.trim()) {
           setStatus("入力欄が空です。アルマンドロ語を入力してください。", true);
           return;
         }
         setStatus("アルマンドロ語 → スペイン語 → 日本語 で翻訳中...");
         try {
           const spanish = transformArmandroToSpanish(text);
-          const japanese = await window.translate(spanish, "es", "ja");
+          const japanese = await mapLinesAsync(spanish, async (line) => {
+            if (!line.trim()) return "";
+            return window.translate(line, "es", "ja");
+          });
           log("Spanish -> Japanese result:", japanese);
           state.output.value = japanese;
           setStatus("逆翻訳が完了しました。");
