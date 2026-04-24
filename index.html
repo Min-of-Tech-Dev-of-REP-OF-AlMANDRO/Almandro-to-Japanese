@@ -213,10 +213,8 @@
         log("applyLigaturesToArmandro called");
         return text
           .replace(/DE/g, "Œ")
-          .replace(/de/g, "Œ")
           .replace(/TH/g, "Ћ")
-          .replace(/th/g, "ћ")
-          .replace(/Th/g, "ћ");
+          .replace(/th/g, "ћ");
       }
 
       function reverseLigaturesFromArmandro(text) {
