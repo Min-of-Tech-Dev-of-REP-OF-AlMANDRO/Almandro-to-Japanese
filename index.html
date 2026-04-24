@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>日本語 ⇄ アルマンドロ語 翻訳</title>
+  <title>日本語 ⇄ アルマンドロ語 翻訳 2.0</title>
   <style>
     :root {
       --bg1: #f8f4ea;
@@ -167,6 +167,7 @@
       "use strict";
 
       const API_BASE = "https://api.mymemory.translated.net/get";
+      const WORD_LIST_PATH = "./word.txt";
       const SPANISH_TO_ARMANDRO_DICTIONARY = {
         que: "ke",
         quien: "kien",
@@ -190,6 +191,8 @@
         output: null,
         status: null,
         debug: null,
+        customJaToAr: [],
+        customArToJa: [],
         btnJaToAr: null,
         btnArToJa: null,
         btnSwap: null,
@@ -245,6 +248,84 @@
           results.push(await mapper(line, index));
         }
         return results.join("\n");
+      }
+
+      function parseWordDictionary(text) {
+        log("parseWordDictionary called");
+        const jaToAr = [];
+        const arToJa = [];
+        const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          const match = trimmed.match(/^\{(.+?):(.+?)\}$/);
+          if (!match) {
+            log("parseWordDictionary skipped invalid line:", trimmed);
+            continue;
+          }
+          const japanese = match[1].trim();
+          const armandro = match[2].trim();
+          if (!japanese || !armandro) continue;
+          jaToAr.push({ source: japanese, target: armandro });
+          arToJa.push({ source: armandro, target: japanese });
+        }
+        jaToAr.sort((a, b) => b.source.length - a.source.length);
+        arToJa.sort((a, b) => b.source.length - a.source.length);
+        log("parseWordDictionary result counts:", { jaToAr: jaToAr.length, arToJa: arToJa.length });
+        return { jaToAr, arToJa };
+      }
+
+      async function loadWordDictionary() {
+        log("loadWordDictionary called");
+        try {
+          const response = await fetch(WORD_LIST_PATH, { method: "GET", cache: "no-store" });
+          log("word.txt response status:", response.status);
+          if (!response.ok) {
+            throw new Error("word.txt の読み込みに失敗しました: HTTP " + response.status);
+          }
+          const text = await response.text();
+          log("word.txt loaded:", text);
+          const parsed = parseWordDictionary(text);
+          state.customJaToAr = parsed.jaToAr;
+          state.customArToJa = parsed.arToJa;
+        } catch (error) {
+          log("loadWordDictionary error:", error.message);
+          state.customJaToAr = [];
+          state.customArToJa = [];
+        }
+      }
+
+      function splitByPriorityDictionary(text, entries) {
+        log("splitByPriorityDictionary called");
+        const segments = [];
+        let cursor = 0;
+        while (cursor < text.length) {
+          let matchedEntry = null;
+          let matchedIndex = -1;
+          for (const entry of entries) {
+            const index = text.indexOf(entry.source, cursor);
+            if (index === -1) continue;
+            if (matchedIndex === -1 || index < matchedIndex || (index === matchedIndex && entry.source.length > matchedEntry.source.length)) {
+              matchedEntry = entry;
+              matchedIndex = index;
+            }
+          }
+          if (!matchedEntry) {
+            segments.push({ type: "plain", text: text.slice(cursor) });
+            break;
+          }
+          if (matchedIndex > cursor) {
+            segments.push({ type: "plain", text: text.slice(cursor, matchedIndex) });
+          }
+          segments.push({
+            type: "dictionary",
+            text: matchedEntry.source,
+            replacement: matchedEntry.target
+          });
+          cursor = matchedIndex + matchedEntry.source.length;
+        }
+        log("splitByPriorityDictionary result:", segments);
+        return segments;
       }
 
       function applyLigaturesToArmandro(text) {
@@ -460,6 +541,49 @@
         return translatedText;
       }
 
+      async function translateJapaneseLineToArmandro(line) {
+        log("translateJapaneseLineToArmandro called:", line);
+        if (!line.trim()) return "";
+        const segments = splitByPriorityDictionary(line, state.customJaToAr);
+        const translatedSegments = [];
+        for (const segment of segments) {
+          if (!segment.text) continue;
+          if (segment.type === "dictionary") {
+            log("translateJapaneseLineToArmandro dictionary segment:", segment);
+            translatedSegments.push(segment.replacement);
+            continue;
+          }
+          const spanish = await window.translate(segment.text, "ja", "es");
+          log("translateJapaneseLineToArmandro spanish segment:", spanish);
+          translatedSegments.push(transformSpanishToArmandro(spanish));
+        }
+        const result = translatedSegments.join("");
+        log("translateJapaneseLineToArmandro result:", result);
+        return result;
+      }
+
+      async function translateArmandroLineToJapanese(line) {
+        log("translateArmandroLineToJapanese called:", line);
+        if (!line.trim()) return "";
+        const segments = splitByPriorityDictionary(line, state.customArToJa);
+        const translatedSegments = [];
+        for (const segment of segments) {
+          if (!segment.text) continue;
+          if (segment.type === "dictionary") {
+            log("translateArmandroLineToJapanese dictionary segment:", segment);
+            translatedSegments.push(segment.replacement);
+            continue;
+          }
+          const spanish = transformArmandroToSpanish(segment.text);
+          const japanese = await window.translate(spanish, "es", "ja");
+          log("translateArmandroLineToJapanese japanese segment:", japanese);
+          translatedSegments.push(japanese);
+        }
+        const result = translatedSegments.join("");
+        log("translateArmandroLineToJapanese result:", result);
+        return result;
+      }
+
       async function translateJapaneseToArmandro() {
         log("translateJapaneseToArmandro called");
         const text = normalizeWhitespace(state.input.value || "");
@@ -469,12 +593,7 @@
         }
         setStatus("日本語 → スペイン語 → アルマンドロ語 で翻訳中...");
         try {
-          const spanish = await mapLinesAsync(text, async (line) => {
-            if (!line.trim()) return "";
-            return window.translate(line, "ja", "es");
-          });
-          log("Japanese -> Spanish result:", spanish);
-          const armandro = transformSpanishToArmandro(spanish);
+          const armandro = await mapLinesAsync(text, async (line) => translateJapaneseLineToArmandro(line));
           state.output.value = armandro;
           setStatus("翻訳が完了しました。");
         } catch (error) {
@@ -493,12 +612,7 @@
         }
         setStatus("アルマンドロ語 → スペイン語 → 日本語 で翻訳中...");
         try {
-          const spanish = transformArmandroToSpanish(text);
-          const japanese = await mapLinesAsync(spanish, async (line) => {
-            if (!line.trim()) return "";
-            return window.translate(line, "es", "ja");
-          });
-          log("Spanish -> Japanese result:", japanese);
+          const japanese = await mapLinesAsync(text, async (line) => translateArmandroLineToJapanese(line));
           state.output.value = japanese;
           setStatus("逆翻訳が完了しました。");
         } catch (error) {
@@ -569,11 +683,16 @@
         return translateViaMyMemory(text, source, target);
       };
 
-      document.addEventListener("DOMContentLoaded", () => {
+      document.addEventListener("DOMContentLoaded", async () => {
         console.log("[GITHUB_TR] DOMContentLoaded fired");
         initDom();
         log("DOMContentLoaded initialization started");
         log("translate function type:", typeof window.translate);
+        await loadWordDictionary();
+        log("custom dictionary loaded:", {
+          jaToAr: state.customJaToAr.length,
+          arToJa: state.customArToJa.length
+        });
         bindEvents();
         setStatus("初期化完了。GitHub Pages上でそのまま実行できます。");
       });
